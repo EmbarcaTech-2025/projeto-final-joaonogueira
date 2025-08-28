@@ -15,18 +15,20 @@ const uint I2C_SCL_PIN_A = 1;
 const uint I2C_SDA_PIN_B = 2;
 const uint I2C_SCL_PIN_B = 3;
 
-void hardware() {
+void setup_hardware() {
 
     stdio_init_all();
     sleep_ms(3000);
     printf("Hardware inicializado. Aguarde inicialização dos sensores.\n");
 
+    // Configuração I2C Port A para BH1750
     i2c_init(I2C_PORT_A, 100 * 1000);
     gpio_set_function(I2C_SDA_PIN_A, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL_PIN_A, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA_PIN_A);
     gpio_pull_up(I2C_SCL_PIN_A);
 
+    // Configuração I2C Port B para AHT10
     i2c_init(I2C_PORT_B, 100 * 1000);
     gpio_set_function(I2C_SDA_PIN_B, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL_PIN_B, GPIO_FUNC_I2C);
@@ -43,7 +45,7 @@ void hardware() {
 }
 
 int main() {
-    hardware();
+    setup_hardware();
     while (1) {
         float temperature, humidity, lux;
 
