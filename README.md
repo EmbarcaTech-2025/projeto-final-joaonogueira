@@ -1,8 +1,8 @@
-# 🌡️ Sistema de Monitoramento Ambiental IoT - Raspberry Pi Pico W
+# 🌡️ Sistema de Monitoramento aplicado à Agricultura Vertical Hidropônica IoT - Raspberry Pi Pico W
 
 ## 📋 Descrição do Projeto
 
-Este projeto implementa um **sistema completo de monitoramento ambiental IoT** utilizando o Raspberry Pi Pico W. O sistema realiza a coleta de dados ambientais (temperatura, umidade e luminosidade), exibe as informações em um display OLED, envia os dados via MQTT para brokers na nuvem e inclui um sistema de alertas para valores críticos.
+Este projeto implementa um **sistema completo de monitoramento aplicado à Agricultura Vertical Hidropônica IoT** utilizando o Raspberry Pi Pico W. O sistema realiza a coleta de dados ambientais (temperatura, umidade e luminosidade), exibe as informações em um display OLED, envia os dados via MQTT para brokers na nuvem e inclui um sistema de alertas para valores críticos.
 
 ### 🎯 Funcionalidades Principais
 
