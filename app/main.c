@@ -1,121 +1,203 @@
-#include <stdio.h>
-#include <string.h>
-#include <math.h>
-#include "pico/stdlib.h"
-#include "hardware/i2c.h"
-#include "hardware/gpio.h"
-#include "pico/cyw43_arch.h"
+/**
+ * @file main.c
+ * @brief Sistema de Monitoramento Ambiental IoT com Raspberry Pi Pico W
+ * 
+ * Este sistema realiza monitoramento contínuo de sensores ambientais (temperatura,
+ * umidade e luminosidade), exibe dados em display OLED, publica via MQTT e 
+ * implementa sistema de alertas para valores críticos.
+ */
 
-#include "aht10.h"
-#include "bh1750.h"
-#include "display.h"
-#include "mqtt_server.h"
+// Standard C libraries
+#include <stdio.h>          // Standard I/O operations
+#include <string.h>         // String manipulation functions
+#include <math.h>           // Mathematical functions (NAN, etc.)
 
-//Sensores
-#define I2C_PORT_A i2c0
-const uint I2C_SDA_PIN_A = 0;
-const uint I2C_SCL_PIN_A = 1;
+// Pico SDK core libraries
+#include "pico/stdlib.h"    // Pico standard library (GPIO, time, etc.)
+#include "hardware/i2c.h"   // Hardware I2C interface
+#include "hardware/gpio.h"  // Hardware GPIO control
+#include "pico/cyw43_arch.h" // WiFi chip (CYW43) architecture support
 
-//Display OLED
-#define I2C_PORT_B i2c1
-const uint8_t I2C_OLED_ADDR = 0x3C;
-const uint I2C_SDA_PIN_B = 14;
-const uint I2C_SCL_PIN_B = 15;
+// Application-specific modules
+#include "aht10.h"          // AHT10 temperature/humidity sensor driver
+#include "bh1750.h"         // BH1750 light intensity sensor driver
+#include "display.h"        // SSD1306 OLED display interface
+#include "mqtt_server.h"    // MQTT communication manager
 
-// Botões de navegação
-#define BTN_A_PIN 5
-#define BTN_B_PIN 6
-#define BTN_C_PIN 22
+/* ========== HARDWARE CONFIGURATION ========== */
 
-// Configurações WiFi
-#define WIFI_SSID "JOAO_2.4G"
-#define WIFI_PASSWORD "30226280!"
-#define TCP_PORT 4242
+// I2C Bus A: Environmental sensors (AHT10 + BH1750)
+#define I2C_PORT_A i2c0            // Primary I2C interface for sensors
+const uint I2C_SDA_PIN_A = 0;      // GPIO 0: I2C SDA line for sensors
+const uint I2C_SCL_PIN_A = 1;      // GPIO 1: I2C SCL line for sensors
 
-// Configurações MQTT
-#define MQTT_PUBLISH_INTERVAL_MS 10000  // Publica a cada 10 segundos
-#define MQTT_ALERT_INTERVAL_MS 30000    // Verifica alertas a cada 30 segundos
+// I2C Bus B: OLED Display (SSD1306)
+#define I2C_PORT_B i2c1            // Secondary I2C interface for display
+const uint8_t I2C_OLED_ADDR = 0x3C; // Standard I2C address for SSD1306 OLED
+const uint I2C_SDA_PIN_B = 14;     // GPIO 14: I2C SDA line for display
+const uint I2C_SCL_PIN_B = 15;     // GPIO 15: I2C SCL line for display
 
-// Limites críticos dos sensores
-#define TEMP_MIN 15.0f
-#define TEMP_MAX 35.0f
-#define HUMIDITY_MAX 80.0f
-#define LUX_MIN 50.0f
+// User interface buttons with pull-up configuration
+#define BTN_A_PIN 5                // GPIO 5: Previous menu navigation
+#define BTN_B_PIN 6                // GPIO 6: Next menu navigation  
+#define BTN_C_PIN 22               // GPIO 22: WiFi reconnection trigger
 
-// Enumeração dos menus
+/* ========== NETWORK CONFIGURATION ========== */
+
+// WiFi access point credentials (modify for your network)
+#define WIFI_SSID "JOAO_2.4G"      // Target WiFi network name (2.4GHz required)
+#define WIFI_PASSWORD "30226280!"  // WiFi network password
+#define TCP_PORT 4242              // Reserved TCP port for future expansions
+
+/* ========== MQTT PUBLISHING INTERVALS ========== */
+
+#define MQTT_PUBLISH_INTERVAL_MS 10000  // Sensor data publication frequency (10s)
+#define MQTT_ALERT_INTERVAL_MS 30000    // Alert checking and publication frequency (30s)
+
+/* ========== ENVIRONMENTAL THRESHOLDS ========== */
+
+// Temperature monitoring range (Celsius)
+#define TEMP_MIN 15.0f             // Minimum acceptable temperature threshold
+#define TEMP_MAX 35.0f             // Maximum acceptable temperature threshold
+
+// Humidity monitoring (Relative Humidity %)
+#define HUMIDITY_MAX 80.0f         // Maximum acceptable humidity threshold
+
+// Light intensity monitoring (Lux)
+#define LUX_MIN 50.0f              // Minimum acceptable light intensity threshold
+
+/* ========== DATA STRUCTURES ========== */
+
+/**
+ * @brief Menu system enumeration
+ * Defines available display screens for user navigation
+ */
 typedef enum {
-    MENU_MEASUREMENTS = 0,
-    MENU_WIFI,
-    MENU_ALERTS,
-    MENU_MQTT,
-    MENU_COUNT
+    MENU_MEASUREMENTS = 0,  // Real-time sensor readings display
+    MENU_WIFI,             // Network connectivity status
+    MENU_ALERTS,           // Critical value alerts summary  
+    MENU_MQTT,             // MQTT broker connection status
+    MENU_COUNT             // Total number of menus (for navigation bounds)
 } MenuId;
 
-// Estrutura dos dados dos sensores
+/**
+ * @brief Environmental sensor data container
+ * Stores current readings and operational status of all sensors
+ */
 typedef struct {
-    float temperature, humidity;
-    float lux;
-    bool aht_ok, lux_ok;
+    float temperature;      // Current temperature reading (°C)
+    float humidity;        // Current relative humidity reading (%)
+    float lux;             // Current light intensity reading (lux)
+    bool aht_ok;           // AHT10 sensor communication status
+    bool lux_ok;           // BH1750 sensor communication status
 } SensorData;
 
-// Estrutura do status WiFi
+/**
+ * @brief WiFi network connection status
+ * Maintains current network connectivity information
+ */
 typedef struct {
-    char ssid[33];
-    bool connected;
-    char ip_address[16];
+    char ssid[33];         // Connected network name (max 32 chars + null terminator)
+    bool connected;        // Current connection state
+    char ip_address[16];   // Assigned IP address in dotted decimal notation
 } WifiStatus;
 
-// Estrutura de alertas
+/**
+ * @brief Environmental alert monitoring system
+ * Tracks which sensors have exceeded their configured thresholds
+ */
 typedef struct {
-    bool temp_critical;
-    bool humidity_critical;
-    bool lux_critical;
-    bool any_critical;
+    bool temp_critical;    // Temperature outside acceptable range
+    bool humidity_critical; // Humidity above maximum threshold
+    bool lux_critical;     // Light intensity below minimum threshold
+    bool any_critical;     // Consolidated alert status (OR of all above)
 } AlertStatus;
 
-// Estado geral da aplicação
+/**
+ * @brief Complete application state container
+ * Central data structure maintaining all system operational data
+ */
 typedef struct {
-    MenuId current_menu;
-    SensorData sensors;
-    WifiStatus wifi;
-    AlertStatus alerts;
-    uint32_t last_mqtt_publish;
-    uint32_t last_mqtt_alert_check;
-    absolute_time_t last_sensor_read;
-    absolute_time_t last_display_update;
+    MenuId current_menu;           // Currently displayed menu screen
+    SensorData sensors;            // Latest environmental sensor readings
+    WifiStatus wifi;               // Network connectivity information
+    AlertStatus alerts;            // Environmental threshold monitoring
+    uint32_t last_mqtt_publish;    // Timestamp of last MQTT data publication
+    uint32_t last_mqtt_alert_check; // Timestamp of last alert verification
+    absolute_time_t last_sensor_read;   // High-precision sensor reading timestamp
+    absolute_time_t last_display_update; // High-precision display refresh timestamp
 } AppState;
 
-// Estrutura para debouncing dos botões
+/**
+ * @brief Button debouncing mechanism
+ * Prevents false triggering from mechanical switch bounce
+ */
 typedef struct {
-    uint pin;
-    bool last_state;
+    uint pin;              // GPIO pin number for this button
+    bool last_state;       // Previous button state for edge detection
 } DebounceButton;
 
+/* ========== GLOBAL STATE VARIABLES ========== */
+
+// Primary application state - contains all system operational data
 static AppState app_state;
+
+// Button instances for user interface navigation
 static DebounceButton btn_a, btn_b, btn_c;
 
-// Função para inicializar botão com debounce
+/* ========== BUTTON INTERFACE FUNCTIONS ========== */
+
+/**
+ * @brief Initialize GPIO button with debouncing configuration
+ * 
+ * Configures a GPIO pin as an input with internal pull-up resistor
+ * and initializes the debouncing mechanism for reliable button detection.
+ * 
+ * @param btn Pointer to button structure to initialize
+ * @param pin GPIO pin number to configure for button input
+ */
 static void button_init(DebounceButton* btn, uint pin) {
-    btn->pin = pin;
-    gpio_init(pin);
-    gpio_pull_up(pin);
-    gpio_set_dir(pin, false);
-    btn->last_state = gpio_get(pin);
+    btn->pin = pin;                    // Store pin number for future reference
+    gpio_init(pin);                    // Initialize GPIO pin for use
+    gpio_pull_up(pin);                 // Enable internal pull-up resistor (button grounds when pressed)
+    gpio_set_dir(pin, false);          // Configure as input (GPIO_IN = false)
+    btn->last_state = gpio_get(pin);   // Initialize debouncing with current pin state
 }
 
-// Função para detectar pressionamento do botão (com debounce)
+/**
+ * @brief Detect button press with debouncing mechanism
+ * 
+ * Implements edge detection to identify button press events (high-to-low transition)
+ * while filtering out mechanical bounce that could cause false triggers.
+ * 
+ * @param btn Pointer to button structure containing state information
+ * @return true if button was pressed (falling edge detected), false otherwise
+ */
 static bool button_pressed(DebounceButton* btn) {
-    bool current_state = gpio_get(btn->pin);
-    bool pressed = (btn->last_state == 1 && current_state == 0);
-    btn->last_state = current_state;
+    bool current_state = gpio_get(btn->pin);                        // Read current GPIO state
+    bool pressed = (btn->last_state == 1 && current_state == 0);    // Detect falling edge (press event)
+    btn->last_state = current_state;                                // Update state for next comparison
     return pressed;
 }
 
-// Função para conectar ao WiFi
+/* ========== NETWORK CONNECTIVITY FUNCTIONS ========== */
+
+/**
+ * @brief Establish WiFi connection and initialize MQTT client
+ * 
+ * Configures the CYW43 wireless chip for station mode, attempts connection
+ * to the configured access point, retrieves network information, and 
+ * initializes the MQTT communication subsystem.
+ * 
+ * @return true if WiFi connection successful and MQTT initialized, false on failure
+ */
 static bool wifi_connect(void) {
+    // Configure WiFi chip for client (station) mode
     cyw43_arch_enable_sta_mode();
     
     printf("Conectando ao WiFi '%s'...\n", WIFI_SSID);
+    
+    // Attempt WiFi connection with 30-second timeout
     if (cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD, CYW43_AUTH_WPA2_AES_PSK, 30000)) {
         printf("Falha ao conectar ao WiFi\n");
         return false;
@@ -123,83 +205,114 @@ static bool wifi_connect(void) {
     
     printf("WiFi conectado!\n");
     
-    // Obter endereço IP
+    // Extract assigned IP address from network interface
     struct netif *netif = &cyw43_state.netif[CYW43_ITF_STA];
     snprintf(app_state.wifi.ip_address, sizeof(app_state.wifi.ip_address), 
              "%s", ip4addr_ntoa(netif_ip4_addr(netif)));
     
+    // Update application state with connection details
     strncpy(app_state.wifi.ssid, WIFI_SSID, sizeof(app_state.wifi.ssid) - 1);
     app_state.wifi.connected = true;
     
-    // Inicializar cliente MQTT após conectar WiFi
+    // Initialize MQTT communication subsystem after successful WiFi connection
     mqtt_conect_init();
     printf("Cliente MQTT inicializado\n");
     
     return true;
 }
 
-// Função para verificar valores críticos
+/* ========== ENVIRONMENTAL MONITORING FUNCTIONS ========== */
+
+/**
+ * @brief Evaluate sensor readings against configured thresholds
+ * 
+ * Analyzes current environmental sensor data to determine if any values
+ * exceed acceptable operational limits. Updates alert flags and provides
+ * visual indication via onboard LED when critical conditions are detected.
+ */
 static void check_critical_values(void) {
-    AlertStatus* alerts = &app_state.alerts;
-    SensorData* sensors = &app_state.sensors;
+    AlertStatus* alerts = &app_state.alerts;      // Reference to alert status structure
+    SensorData* sensors = &app_state.sensors;     // Reference to current sensor readings
     
-    // Resetar alertas
+    // Reset all alert flags for fresh evaluation
     alerts->temp_critical = false;
     alerts->humidity_critical = false;
     alerts->lux_critical = false;
     
+    // Evaluate temperature and humidity if AHT10 sensor is operational
     if (sensors->aht_ok) {
+        // Check temperature against acceptable range
         if (sensors->temperature < TEMP_MIN || sensors->temperature > TEMP_MAX) {
             alerts->temp_critical = true;
         }
+        // Check humidity against maximum threshold
         if (sensors->humidity > HUMIDITY_MAX) {
             alerts->humidity_critical = true;
         }
     }
     
+    // Evaluate light intensity if BH1750 sensor is operational
     if (sensors->lux_ok) {
+        // Check light level against minimum threshold
         if (sensors->lux < LUX_MIN) {
             alerts->lux_critical = true;
         }
     }
     
+    // Consolidate alert status - true if any individual alert is active
     alerts->any_critical = alerts->temp_critical || alerts->humidity_critical || alerts->lux_critical;
     
-    // Piscar LED onboard se houver alertas
+    // Provide visual indication of critical conditions via onboard LED
     if (alerts->any_critical) {
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-        sleep_ms(100);
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);    // Turn on LED
+        sleep_ms(100);                                     // Brief illumination period
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);    // Turn off LED
     }
 }
 
-// Função para publicar dados via MQTT
+/* ========== MQTT COMMUNICATION FUNCTIONS ========== */
+
+/**
+ * @brief Publish current sensor readings to MQTT broker
+ * 
+ * Formats environmental sensor data into JSON payload and publishes
+ * to the designated MQTT topic for remote monitoring. Only executes
+ * if WiFi connectivity is established.
+ */
 static void mqtt_publish_sensor_data_func(void) {
+    // Verify WiFi connectivity before attempting MQTT publication
     if (!app_state.wifi.connected) {
         return;
     }
     
-    SensorData* sensors = &app_state.sensors;
+    SensorData* sensors = &app_state.sensors;    // Reference to current sensor data
     
-    // Usar a função mqtt_get_and_publish com os dados dos sensores
+    // Publish sensor data using high-level MQTT interface
     mqtt_get_and_publish(
-        wifi_check(),           // status WiFi
-        mqtt_check(),          // status MQTT
-        sensors->aht_ok,       // AHT10 OK
-        false,                 // BMP OK (não temos BMP280)
-        sensors->lux_ok,       // LUX OK
-        sensors->temperature,  // temperatura AHT
-        0.0f,                 // temperatura BMP (não usado)
-        sensors->humidity,     // umidade
-        0.0f,                 // pressão (não usado)
-        sensors->lux          // luminosidade
+        wifi_check(),           // Current WiFi connection status
+        mqtt_check(),          // Current MQTT broker connection status
+        sensors->aht_ok,       // AHT10 temperature/humidity sensor status
+        false,                 // BMP280 sensor status (not present in this system)
+        sensors->lux_ok,       // BH1750 light intensity sensor status
+        sensors->temperature,  // Current temperature reading (°C)
+        0.0f,                 // BMP280 temperature (unused - set to 0)
+        sensors->humidity,     // Current humidity reading (%)
+        0.0f,                 // Atmospheric pressure (unused - set to 0)
+        sensors->lux          // Current light intensity reading (lux)
     );
     
     printf("Dados dos sensores publicados via MQTT\n");
 }
 
-// Função para publicar alertas via MQTT
+/**
+ * @brief Publish environmental alerts to MQTT broker
+ * 
+ * Generates and transmits alert notifications when sensor readings
+ * exceed configured thresholds. Alert data is formatted as JSON
+ * and published to dedicated alert topic.
+ */
 static void mqtt_publish_alerts_func(void) {
+    // Verify WiFi connectivity before attempting MQTT publication
     if (!app_state.wifi.connected) {
         return;
     }
