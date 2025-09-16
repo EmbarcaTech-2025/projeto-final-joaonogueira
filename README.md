@@ -15,6 +15,16 @@ Este projeto implementa um **sistema completo de monitoramento aplicado à Agric
 
 ---
 
+## 🎬 Demonstração
+
+Veja abaixo o funcionamento do sistema:
+
+![Tela de Medição](imagens/tela_medicao.png)
+![Alerta Crítico](imagens/alerta_critico.gif)
+
+
+---
+
 ## 🛠️ Hardware Utilizado
 
 ### Componentes Principais
