@@ -19,8 +19,22 @@ Este projeto implementa um **sistema completo de monitoramento aplicado à Agric
 
 Veja abaixo o funcionamento do sistema:
 
+
+### Tela de Medição
+
+
 ![Tela de Medição](imagens/tela_medicao.jpg)
+
+
+### Tela de Conexão
+
+
 ![Tela de Conexão](imagens/tela_conexao.gif)
+
+
+### Terminal com Alertas e Publicações MQTT
+
+
 ![Alerta Crítico](imagens/alerta_critico.gif)
 
 
