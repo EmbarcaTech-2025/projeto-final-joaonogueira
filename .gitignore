@@ -1,2 +1,53 @@
-build
-!.vscode/*
+# Ignorar diretórios e arquivos de build
+build/
+CMakeFiles/
+*.o
+*.obj
+*.elf
+*.bin
+*.uf2
+*.hex
+*.map
+*.dis
+*.a
+*.so
+*.dll
+*.exe
+*.out
+*.pyc
+*.pyo
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+*.old
+*.orig
+*.d
+*.gcda
+*.gcno
+*.gcov
+
+# Ignorar dependências externas baixadas
+pico-sdk/
+
+# Ignorar configurações locais do VS Code (exceto tasks/launch úteis)
+.vscode/settings.json
+.vscode/c_cpp_properties.json
+
+# Ignorar arquivos do sistema
+.DS_Store
+Thumbs.db
+
+# Ignorar arquivos de credenciais (exemplo, se existirem)
+*.secret
+*.env
+wifi_config.h
+
+# Permitir exemplos de configuração
+!*.example
+
+# Não ignore arquivos importantes
+!CMakeLists.txt
+!README.md
+!LICENSE
