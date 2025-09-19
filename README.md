@@ -1,8 +1,9 @@
-# 🌡️ Sistema de Monitoramento aplicado à Agricultura Vertical Hidropônica IoT - Raspberry Pi Pico W
+# 🌡️ SMAVHIoT - Sistema de Monitoramento aplicado à Agricultura Vertical Hidropônica IoT
+
 
 ## 📋 Descrição do Projeto
 
-Este projeto implementa um **sistema completo de monitoramento aplicado à Agricultura Vertical Hidropônica IoT** utilizando o Raspberry Pi Pico W. O sistema realiza a coleta de dados ambientais (temperatura, umidade e luminosidade), exibe as informações em um display OLED, envia os dados via MQTT para brokers na nuvem e inclui um sistema de alertas para valores críticos.
+O **SMAVHIoT** é um sistema completo de monitoramento aplicado à Agricultura Vertical Hidropônica IoT utilizando o Raspberry Pi Pico W. O sistema realiza a coleta de dados ambientais (temperatura, umidade e luminosidade), exibe as informações em um display OLED, envia os dados via MQTT para brokers na nuvem e inclui um sistema de alertas para valores críticos.
 
 ### 🎯 Funcionalidades Principais
 
@@ -76,7 +77,7 @@ Raspberry Pi Pico W
 ### 📁 Estrutura de Diretórios
 
 ```
-projeto-final-joaonogueira/Etapa3/
+SMAVHIoT/
 ├── app/
 │   └── main.c                 # Aplicação principal
 ├── hal/                       # Hardware Abstraction Layer
@@ -142,7 +143,7 @@ graph TD
 1. **Clone o repositório:**
 ```bash
 git clone https://github.com/EmbarcaTech-2025/projeto-final-joaonogueira.git
-cd projeto-final-joaonogueira/Etapa3
+cd projeto-final-joaonogueira/SMAVHIoT
 ```
 
 2. **Configure as credenciais WiFi:**
@@ -168,7 +169,7 @@ make -j4
 5. **Flash no Pico W:**
 ```bash
 # Segure BOOTSEL no Pico W e conecte USB
-cp Etapa3.uf2 /path/to/RPI-RP2/
+cp SMAVHIoT.uf2 /path/to/RPI-RP2/
 ```
 
 ---
@@ -325,13 +326,13 @@ mqtt_setup("seu_client_id", "seu.broker.com", &conct_status_mqtt);
 ### 🔄 Dependências CMake
 
 ```cmake
-target_link_libraries(Etapa3 
-    pico_stdlib                           # Biblioteca padrão
-    hardware_i2c                          # Interface I2C
-    pico_cyw43_arch_lwip_threadsafe_background  # WiFi + lwIP
-    pico_lwip_iperf                       # Ferramentas de rede
-    pico_lwip_http                        # HTTP (futuras expansões)
-    pico_lwip_mqtt                        # Cliente MQTT
+target_link_libraries(SMAVHIoT 
+  pico_stdlib                           # Biblioteca padrão
+  hardware_i2c                          # Interface I2C
+  pico_cyw43_arch_lwip_threadsafe_background  # WiFi + lwIP
+  pico_lwip_iperf                       # Ferramentas de rede
+  pico_lwip_http                        # HTTP (futuras expansões)
+  pico_lwip_mqtt                        # Cliente MQTT
 )
 ```
 
@@ -339,8 +340,8 @@ target_link_libraries(Etapa3
 
 **Serial USB habilitado:**
 ```c
-pico_enable_stdio_usb(Etapa3 1)
-pico_enable_stdio_uart(Etapa3 0)
+pico_enable_stdio_usb(SMAVHIoT 1)
+pico_enable_stdio_uart(SMAVHIoT 0)
 ```
 
 **Monitor serial:**
